@@ -1,0 +1,17 @@
+name: logistic-agent
+kind: prompt
+description: Answers questions about shipments, container tracking and ETAs.
+model: gpt-4o
+temperature: 0.2
+instructions_file: system_prompt.md
+
+tools:
+  - type: mcp
+    name: maersk-mcp
+    server_url: https://ca-maersk-mcp-dev.placeholder-env-dev.example.com/mcp
+  - type: mcp
+    name: weather-mcp
+    server_url: https://ca-weather-mcp-dev.placeholder-env-dev.example.com/mcp
+
+knowledge:
+  sharepoint_site_url: https://sharepoint.example.com/sites/placeholder-logistics

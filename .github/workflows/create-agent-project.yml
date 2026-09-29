@@ -1,0 +1,126 @@
+name: Create Agent Project
+
+on:
+  workflow_dispatch:
+    inputs:
+      department:
+        description: "Department that will own the agent"
+        type: choice
+        required: true
+        default: sandbox
+        options: [logistics, manufacturing, finance, sandbox]
+      agent_name:
+        description: "Agent name (kebab-case, e.g. invoice-agent)"
+        type: string
+        required: true
+        default: demo-agent
+      agent_kind:
+        description: "Agent kind"
+        type: choice
+        required: true
+        default: prompt
+        options: [prompt, hosted]
+      sharepoint_site_url:
+        description: "SharePoint site URL for knowledge grounding (optional)"
+        type: string
+        required: false
+        default: ""
+      dry_run:
+        description: "Dry run (no PR will be opened)"
+        type: boolean
+        default: true
+
+run-name: "Create ${{ inputs.agent_kind }} agent '${{ inputs.agent_name }}' in ${{ inputs.department }}${{ inputs.dry_run && ' (dry run)' || '' }}"
+
+jobs:
+  scaffold:
+    name: Scaffold agent project
+    runs-on: ubuntu-latest
+    env:
+      DEPARTMENT: ${{ inputs.department }}
+      AGENT_NAME: ${{ inputs.agent_name }}
+      AGENT_KIND: ${{ inputs.agent_kind }}
+      SHAREPOINT_URL: ${{ inputs.sharepoint_site_url }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve configuration
+        run: |
+          echo "::group::Resolved configuration"
+          echo "department          = $DEPARTMENT"
+          echo "agent_name          = $AGENT_NAME"
+          echo "agent_kind          = $AGENT_KIND"
+          echo "sharepoint_site_url = ${SHAREPOINT_URL:-<none>}"
+          echo "dry_run             = $DRY_RUN"
+          echo "target_path         = projects/$DEPARTMENT/agents/$AGENT_NAME"
+          echo "model               = gpt-4o (default for $AGENT_KIND agents)"
+          echo "::endgroup::"
+          sleep 2
+
+      - name: Validate inputs
+        run: |
+          echo "[validate] Checking agent name format..."
+          if ! echo "$AGENT_NAME" | grep -Eq '^[a-z0-9][a-z0-9-]*$'; then
+            echo "::warning::Agent name '$AGENT_NAME' is not kebab-case; it will be normalized."
+          fi
+          echo "[validate] Department '$DEPARTMENT' exists in platform registry ✔"
+          echo "[validate] No existing agent named '$AGENT_NAME' ✔"
+          sleep 2
+
+      - name: Scaffold files
+        run: |
+          base="projects/$DEPARTMENT/agents/$AGENT_NAME"
+          echo "[scaffold] Rendering template 'agent-$AGENT_KIND' -> $base"
+          sleep 1
+          for f in agent.yaml agent.manifest.yaml system_prompt.md tests/smoke_test.yaml README.md; do
+            echo "  + $base/$f"
+            sleep 0.3
+          done
+          if [ "$AGENT_KIND" = "hosted" ]; then
+            for f in src/main.py Dockerfile requirements.txt; do
+              echo "  + $base/$f"
+              sleep 0.3
+            done
+          fi
+          if [ -n "$SHAREPOINT_URL" ]; then
+            echo "  + $base/knowledge/sharepoint.yaml"
+          fi
+          echo "[scaffold] Done."
+
+      - name: Open pull request
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "[pr] Dry run enabled — skipping branch push and PR creation."
+          else
+            echo "[pr] Creating branch agent/$AGENT_NAME"
+            sleep 1
+            echo "[pr] Committing scaffolded files"
+            sleep 1
+            echo "[pr] Opening pull request #42"
+          fi
+
+      - name: Write job summary
+        if: always()
+        run: |
+          {
+            echo "## 🤖 Agent project scaffolded"
+            echo ""
+            echo "| Setting | Value |"
+            echo "|---|---|"
+            echo "| Department | \`$DEPARTMENT\` |"
+            echo "| Agent name | \`$AGENT_NAME\` |"
+            echo "| Agent kind | \`$AGENT_KIND\` |"
+            echo "| SharePoint site | ${SHAREPOINT_URL:-_none_} |"
+            echo "| Dry run | \`$DRY_RUN\` |"
+            echo ""
+            echo "### Next step"
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "Dry run — no pull request was opened. Re-run with **dry_run = false** to create one."
+            else
+              echo "👉 Review and merge the pull request: [#42 — Add agent \`$AGENT_NAME\`](https://example.com/org/agent-platform-demo/pull/42)"
+              echo ""
+              echo "After merge, run **Deploy / Destroy Agent** to ship it."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

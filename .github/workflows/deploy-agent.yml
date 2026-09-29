@@ -1,0 +1,149 @@
+name: Deploy / Destroy Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Action"
+        type: choice
+        required: true
+        default: deploy
+        options: [deploy, destroy]
+      agent_name:
+        description: "Agent"
+        type: choice
+        required: true
+        default: logistic-agent
+        options: [logistic-agent, people-agent, orchestrator-agent]
+      environment:
+        description: "Target environment"
+        type: choice
+        required: true
+        default: DEV
+        options: [DEV, TEST, PROD]
+      provision_toolbox:
+        description: "Provision toolbox (MCP tools, connections)"
+        type: boolean
+        default: true
+      dry_run:
+        description: "Dry run (plan only)"
+        type: boolean
+        default: false
+
+run-name: "${{ inputs.action }} ${{ inputs.agent_name }} → ${{ inputs.environment }}${{ inputs.dry_run && ' (dry run)' || '' }}"
+
+jobs:
+  agent:
+    name: ${{ inputs.action }} ${{ inputs.agent_name }} (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    env:
+      ACTION: ${{ inputs.action }}
+      AGENT: ${{ inputs.agent_name }}
+      ENV: ${{ inputs.environment }}
+      TOOLBOX: ${{ inputs.provision_toolbox }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      REGISTRY: registry.example.com/agents
+      MODEL: gpt-4o
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute metadata
+        id: meta
+        run: |
+          tag="$(date +%Y%m%d)-${GITHUB_SHA::7}"
+          echo "image_tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "agent_version=1.$GITHUB_RUN_NUMBER.0" >> "$GITHUB_OUTPUT"
+          echo "Image tag: $tag"
+
+      - name: Validate config
+        run: |
+          echo "[config] Loading projects/*/agents/$AGENT/agent.yaml"
+          sleep 1
+          echo "[config] Schema validation passed (agent.manifest.yaml v1)"
+          echo "[config] Environment overlay '$ENV' applied"
+          echo "[config] Model deployment '$MODEL' available in $ENV ✔"
+          sleep 1
+
+      - name: Build image
+        if: inputs.action == 'deploy'
+        run: |
+          echo "[build] docker build -t $REGISTRY/$AGENT:${{ steps.meta.outputs.image_tag }} ."
+          for s in "1/6 FROM python:3.12-slim" "2/6 WORKDIR /app" "3/6 COPY requirements.txt ." "4/6 RUN pip install -r requirements.txt" "5/6 COPY src/ ./src" "6/6 CMD [\"python\",\"-m\",\"src.main\"]"; do
+            echo "  => [$s]"; sleep 0.7
+          done
+          echo "[build] Successfully built image ($AGENT, 182MB)"
+
+      - name: Push image
+        if: inputs.action == 'deploy'
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then echo "[push] Dry run — skipping push"; exit 0; fi
+          echo "[push] Pushing $REGISTRY/$AGENT:${{ steps.meta.outputs.image_tag }}"
+          sleep 2
+          echo "[push] digest: sha256:$(echo $GITHUB_SHA | sha256sum | cut -c1-64) size: 2841"
+
+      - name: Provision toolbox
+        if: inputs.action == 'deploy' && inputs.provision_toolbox
+        run: |
+          echo "[toolbox] Registering MCP tool: maersk-mcp"
+          sleep 1
+          echo "[toolbox] Registering MCP tool: weather-mcp"
+          sleep 1
+          echo "[toolbox] Creating connection 'sharepoint-knowledge'"
+          echo "[toolbox] 3 tools ready ✔"
+
+      - name: ${{ inputs.action == 'deploy' && 'Deploy agent' || 'Destroy agent' }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "[plan] Would $ACTION agent '$AGENT' in $ENV"
+            exit 0
+          fi
+          if [ "$ACTION" = "deploy" ]; then
+            echo "[deploy] Creating agent version ${{ steps.meta.outputs.agent_version }} for '$AGENT' in $ENV"
+            sleep 2
+            echo "[deploy] Agent version created: $AGENT:${{ steps.meta.outputs.agent_version }}"
+          else
+            echo "[destroy] Removing agent '$AGENT' from $ENV"
+            sleep 2
+            echo "[destroy] Deleted 3 agent versions, 1 toolbox binding"
+          fi
+
+      - name: Assign roles
+        if: inputs.action == 'deploy' && !inputs.dry_run
+        run: |
+          echo "[rbac] Assigning 'Agent User' to group grp-$AGENT-users-${ENV,,}"
+          sleep 1
+          echo "[rbac] Assigning 'Storage Blob Data Reader' to managed identity mi-$AGENT-${ENV,,}"
+          sleep 1
+          echo "[rbac] 2 role assignments applied ✔"
+
+      - name: Poll until active
+        if: inputs.action == 'deploy' && !inputs.dry_run
+        run: |
+          for i in 1 2 3 4; do
+            state=Provisioning; [ $i -eq 4 ] && state=Active
+            echo "[poll] attempt $i/10 — status: $state"
+            [ "$state" = "Active" ] && break
+            sleep 3
+          done
+          echo "[poll] Agent '$AGENT' is Active in $ENV 🎉"
+
+      - name: Write job summary
+        if: always()
+        run: |
+          icon="🚀"; [ "$ACTION" = "destroy" ] && icon="🧹"
+          suffix=""; [ "$DRY_RUN" = "true" ] && suffix=" (dry run)"
+          {
+            echo "## $icon Agent \`$AGENT\` — $ACTION$suffix"
+            echo ""
+            echo "| Environment | Image tag | Model | Agent version |"
+            echo "|---|---|---|---|"
+            echo "| **$ENV** | \`${{ steps.meta.outputs.image_tag }}\` | \`$MODEL\` | \`${{ steps.meta.outputs.agent_version }}\` |"
+            echo ""
+            echo "- Toolbox provisioned: \`$TOOLBOX\`"
+            echo "- Dry run: \`$DRY_RUN\`"
+            echo ""
+            if [ "$ACTION" = "deploy" ]; then
+              echo "### ▶️ [Open in Playground](https://playground.example.com/agents/$AGENT?env=${ENV,,})"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

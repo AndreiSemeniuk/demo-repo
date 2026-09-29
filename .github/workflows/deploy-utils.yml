@@ -1,0 +1,111 @@
+name: Deploy / Destroy Utils
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Action"
+        type: choice
+        required: true
+        default: deploy
+        options: [deploy, destroy]
+      util_name:
+        description: "Shared util (MCP server)"
+        type: choice
+        required: true
+        default: maersk-mcp
+        options: [maersk-mcp, weather-mcp]
+      environment:
+        description: "Target environment"
+        type: choice
+        required: true
+        default: SANDBOX
+        options: [SANDBOX, DEV, TEST, PROD]
+      dry_run:
+        description: "Dry run (plan only)"
+        type: boolean
+        default: false
+
+run-name: "${{ inputs.action }} ${{ inputs.util_name }} → ${{ inputs.environment }}${{ inputs.dry_run && ' (dry run)' || '' }}"
+
+jobs:
+  util:
+    name: ${{ inputs.action }} ${{ inputs.util_name }} (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    env:
+      ACTION: ${{ inputs.action }}
+      UTIL: ${{ inputs.util_name }}
+      ENV: ${{ inputs.environment }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      REGISTRY: registry.example.com/utils
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute metadata
+        id: meta
+        run: |
+          env_lc="${ENV,,}"
+          tag="$(date +%Y%m%d)-${GITHUB_SHA::7}"
+          app="ca-$UTIL-$env_lc"
+          fqdn="$app.placeholder-env-$env_lc.example.com"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+          echo "fqdn=$fqdn" >> "$GITHUB_OUTPUT"
+          echo "Container App: $app"
+
+      - name: Build container
+        if: inputs.action == 'deploy'
+        run: |
+          echo "[build] Context: projects/logistics/shared/utils/$UTIL"
+          for s in "1/5 FROM python:3.12-slim" "2/5 COPY requirements.txt ." "3/5 RUN pip install -r requirements.txt" "4/5 COPY main.py ." "5/5 EXPOSE 8080"; do
+            echo "  => [$s]"; sleep 0.7
+          done
+          echo "[build] Built $REGISTRY/$UTIL:${{ steps.meta.outputs.tag }} (96MB)"
+
+      - name: Push container
+        if: inputs.action == 'deploy'
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then echo "[push] Dry run — skipping push"; exit 0; fi
+          echo "[push] Pushing $REGISTRY/$UTIL:${{ steps.meta.outputs.tag }}"
+          sleep 2
+          echo "[push] Pushed ✔"
+
+      - name: ${{ inputs.action == 'deploy' && 'Create or update Container App' || 'Delete Container App' }}
+        run: |
+          app="${{ steps.meta.outputs.app }}"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "[plan] Would $ACTION Container App '$app' in $ENV"
+            exit 0
+          fi
+          if [ "$ACTION" = "deploy" ]; then
+            echo "[containerapp] Looking up '$app'..."
+            sleep 1
+            echo "[containerapp] Not found — creating (ingress: external, port 8080, min replicas 1)"
+            sleep 2
+            echo "[containerapp] Revision $app--r${GITHUB_RUN_NUMBER} provisioned"
+            sleep 1
+            echo "[containerapp] Health probe /health → 200 OK"
+            echo "[containerapp] FQDN: https://${{ steps.meta.outputs.fqdn }}"
+          else
+            echo "[containerapp] Deleting '$app'..."
+            sleep 2
+            echo "[containerapp] Deleted ✔"
+          fi
+
+      - name: Write job summary
+        if: always()
+        run: |
+          icon="🧩"; [ "$ACTION" = "destroy" ] && icon="🧹"
+          suffix=""; [ "$DRY_RUN" = "true" ] && suffix=" (dry run)"
+          {
+            echo "## $icon Util \`$UTIL\` — $ACTION$suffix"
+            echo ""
+            echo "| Environment | Container App | Image tag |"
+            echo "|---|---|---|"
+            echo "| **$ENV** | \`${{ steps.meta.outputs.app }}\` | \`${{ steps.meta.outputs.tag }}\` |"
+            echo ""
+            if [ "$ACTION" = "deploy" ]; then
+              echo "**Endpoint:** \`https://${{ steps.meta.outputs.fqdn }}/mcp\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

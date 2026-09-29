@@ -1,0 +1,22 @@
+# Department-level configuration (placeholder values only)
+department: logistics
+owner_group: grp-logistics-platform-owners
+cost_center: CC-0000
+
+environments:
+  DEV:
+    subscription_id: 00000000-0000-0000-0000-000000000000
+    resource_group: rg-agents-logistics-dev
+    ai_project: aiproj-logistics-dev
+  TEST:
+    subscription_id: 00000000-0000-0000-0000-000000000000
+    resource_group: rg-agents-logistics-test
+    ai_project: aiproj-logistics-test
+  PROD:
+    subscription_id: 00000000-0000-0000-0000-000000000000
+    resource_group: rg-agents-logistics-prod
+    ai_project: aiproj-logistics-prod
+
+defaults:
+  model: gpt-4o
+  region: placeholder-region

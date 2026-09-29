@@ -1,0 +1,17 @@
+apiVersion: agents.platform.example.com/v1
+kind: AgentManifest
+metadata:
+  name: logistic-agent
+  department: logistics
+  owner: grp-logistics-platform-owners
+spec:
+  environments: [DEV, TEST, PROD]
+  roles:
+    users: grp-logistic-agent-users
+    admins: grp-logistic-agent-admins
+  toolbox:
+    provision: true
+    utils: [maersk-mcp, weather-mcp]
+  evaluation:
+    smoke_test: tests/smoke_test.yaml
+    min_groundedness: 0.8
