@@ -11,7 +11,7 @@ spec:
     admins: grp-logistic-agent-admins
   toolbox:
     provision: true
-    utils: [maersk-mcp, weather-mcp]
+    utils: [shipping-mcp, weather-mcp]
   evaluation:
     smoke_test: tests/smoke_test.yaml
     min_groundedness: 0.8

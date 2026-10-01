@@ -13,8 +13,8 @@ on:
         description: "Shared util (MCP server)"
         type: choice
         required: true
-        default: maersk-mcp
-        options: [maersk-mcp, weather-mcp]
+        default: shipping-mcp
+        options: [shipping-mcp, weather-mcp]
       environment:
         description: "Target environment"
         type: choice

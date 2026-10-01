@@ -7,8 +7,8 @@ instructions_file: system_prompt.md
 
 tools:
   - type: mcp
-    name: maersk-mcp
-    server_url: https://ca-maersk-mcp-dev.placeholder-env-dev.example.com/mcp
+    name: shipping-mcp
+    server_url: https://ca-shipping-mcp-dev.placeholder-env-dev.example.com/mcp
   - type: mcp
     name: weather-mcp
     server_url: https://ca-weather-mcp-dev.placeholder-env-dev.example.com/mcp

@@ -85,7 +85,7 @@ jobs:
       - name: Provision toolbox
         if: inputs.action == 'deploy' && inputs.provision_toolbox
         run: |
-          echo "[toolbox] Registering MCP tool: maersk-mcp"
+          echo "[toolbox] Registering MCP tool: shipping-mcp"
           sleep 1
           echo "[toolbox] Registering MCP tool: weather-mcp"
           sleep 1

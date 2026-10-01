@@ -1,11 +1,11 @@
-"""maersk-mcp — placeholder MCP server exposing shipment-tracking tools.
+"""shipping-mcp — placeholder MCP server exposing shipment-tracking tools.
 
 Demo only: returns canned data, calls no external services.
 """
 
 from mcp.server.fastmcp import FastMCP
 
-mcp = FastMCP("maersk-mcp")
+mcp = FastMCP("shipping-mcp")
 
 
 @mcp.tool()
