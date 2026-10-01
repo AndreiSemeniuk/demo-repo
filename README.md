@@ -39,7 +39,7 @@ projects/
         system_prompt.md             # agent instructions
     shared/
       utils/
-        maersk-mcp/                  # shared MCP server (container app)
+        shipping-mcp/                  # shared MCP server (container app)
           main.py
           Dockerfile
           requirements.txt
